@@ -1,0 +1,122 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>Sky23 by wangfakang</title>
+
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/github-light.css">
+    <script src="javascripts/scale.fix.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1 class="header">Sky23</h1>
+        <p class="header">how gdb nginx core</p>
+
+        <ul>
+          <li class="download"><a class="buttons" href="https://github.com/wangfakang/sky23/zipball/master">Download ZIP</a></li>
+          <li class="download"><a class="buttons" href="https://github.com/wangfakang/sky23/tarball/master">Download TAR</a></li>
+          <li><a class="buttons github" href="https://github.com/wangfakang/sky23">View On GitHub</a></li>
+        </ul>
+
+        <p class="header">This project is maintained by <a class="header name" href="https://github.com/wangfakang">wangfakang</a></p>
+
+
+      </header>
+      <section>
+        <p>如何去追nginx的core dump:</p>
+
+<p>我们在追一个程序挂掉的时候的方法：</p>
+
+<h1>
+<a id="1一般都会去找core文件要是没有在输入可执行文件运行命令的同一路径下找到该core文件" class="anchor" href="#1%E4%B8%80%E8%88%AC%E9%83%BD%E4%BC%9A%E5%8E%BB%E6%89%BEcore%E6%96%87%E4%BB%B6%E8%A6%81%E6%98%AF%E6%B2%A1%E6%9C%89%E5%9C%A8%E8%BE%93%E5%85%A5%E5%8F%AF%E6%89%A7%E8%A1%8C%E6%96%87%E4%BB%B6%E8%BF%90%E8%A1%8C%E5%91%BD%E4%BB%A4%E7%9A%84%E5%90%8C%E4%B8%80%E8%B7%AF%E5%BE%84%E4%B8%8B%E6%89%BE%E5%88%B0%E8%AF%A5core%E6%96%87%E4%BB%B6" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>1.一般都会去找core文件，要是没有在输入可执行文件运行命令的同一路径下找到该core文件？</h1>
+
+<p>那么首先就看：<br>
+ulimit -c 如果是0的话，那就是你没有打开core dump。就不会产生了。
+如果发现不是0的话，而且在当前路径下还找不到coredump文件，对了如果你不知道当前程序
+启动时候的路径的话可以 sudo ls /proc/pid/cwd 然后找到。   </p>
+
+<p>如果没有在当前启动程序的路径下找到core dump文件，那么就执行：
+sudo sysctl -a | grep "core_pattern" 然后看看把core dump产生的路径设置到那个下面了。
+当然你自己也可以设置：</p>
+
+<pre><code>可以使用： echo "1" &gt; /proc/sys/kernel/core_uses_pid 让你的core后缀是pid
+echo "/corefile/core-%e-%p-%t" &gt; core_pattern，可以将core文件统一生成到/corefile目录下，产生的文件名为core-命令名-pid-时间戳
+以下是参数列表:
+    %p - insert pid into filename 添加pid
+    %u - insert current uid into filename 添加当前uid
+    %g - insert current gid into filename 添加当前gid
+    %s - insert signal that caused the coredump into the filename 添加导致产生core的信号
+    %t - insert UNIX time that the coredump occurred into filename 添加core文件生成时的unix时间
+    %h - insert hostname where the coredump happened into filename 添加主机名
+    %e - insert coredumping executable name into filename 添加命令名
+</code></pre>
+
+<p>最后一步就来gdp binary corefile  [binary是可执行程序名称，corefile是coredump名字]
+执行bt打印函数的堆栈信息，定位到那个函数的问题，然后细看code。</p>
+
+<h1>
+<a id="2前面说的都是有core-dump文件产生了那要是没有core-产生但是通过dmesg又看到类似如下日志" class="anchor" href="#2%E5%89%8D%E9%9D%A2%E8%AF%B4%E7%9A%84%E9%83%BD%E6%98%AF%E6%9C%89core-dump%E6%96%87%E4%BB%B6%E4%BA%A7%E7%94%9F%E4%BA%86%E9%82%A3%E8%A6%81%E6%98%AF%E6%B2%A1%E6%9C%89core-%E4%BA%A7%E7%94%9F%E4%BD%86%E6%98%AF%E9%80%9A%E8%BF%87dmesg%E5%8F%88%E7%9C%8B%E5%88%B0%E7%B1%BB%E4%BC%BC%E5%A6%82%E4%B8%8B%E6%97%A5%E5%BF%97" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>2.前面说的都是有core dump文件产生了，那要是没有core 产生，但是通过dmesg又看到类似如下日志：</h1>
+
+<pre><code>[506319.457950] nginx[18122]: segfault at 0 ip 00007fe9b3336ae sp 00007aaf3aa9523 error 5 in libc-2.12.so[7ff9b327a000+18a000]
+
+</code></pre>
+
+<p>这个时候可以使用如下这两个神器来查是那个函数出问题了：</p>
+
+<h2>
+<a id="一通过反汇编的方式来查看" class="anchor" href="#%E4%B8%80%E9%80%9A%E8%BF%87%E5%8F%8D%E6%B1%87%E7%BC%96%E7%9A%84%E6%96%B9%E5%BC%8F%E6%9D%A5%E6%9F%A5%E7%9C%8B" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>一.通过反汇编的方式来查看：</h2>
+
+<ol>
+<li><p>gdb binary</p></li>
+<li><p>disassemble  00007fe9b3336ae   （其中00007fe9b3336ae就是上面字段ip后面的值）</p></li>
+</ol>
+
+<h2>
+<a id="二使用addr2line工具" class="anchor" href="#%E4%BA%8C%E4%BD%BF%E7%94%A8addr2line%E5%B7%A5%E5%85%B7" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>二.使用addr2line工具：</h2>
+
+<p>1.addr2line -e binary  00007fe9b3336ae -f （其中00007fe9b3336ae就是上面字段ip后面的值，binary是可执行文件）
+可以找到出问题的文件名和行号.</p>
+
+<h1>
+<a id="communite--" class="anchor" href="#communite--" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Communite  </h1>
+
+<p>在使用中有任何问题，欢迎反馈给我，可以用以下联系方式跟我交流</p>
+
+<ul>
+<li>邮件(1031379296#qq.com, 把#换成@)</li>
+<li>QQ: 1031379296</li>
+<li>weibo: <a href="http://weibo.com/fakangwang">@王发康</a>
+</li>
+</ul>
+
+<h1>
+<a id="thx" class="anchor" href="#thx" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Thx</h1>
+
+<ul>
+<li>chunshengsterATgmail.com</li>
+</ul>
+
+<h1>
+<a id="author" class="anchor" href="#author" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Author</h1>
+
+<ul>
+<li>Linux\nginx\golang\c\c++爱好者</li>
+<li>欢迎一起交流  一起学习# </li>
+<li>Others say good and Others good</li>
+</ul>
+      </section>
+      <footer>
+        <p><small>Hosted on <a href="https://pages.github.com">GitHub Pages</a> using the Dinky theme</small></p>
+      </footer>
+    </div>
+    <!--[if !IE]><script>fixScale(document);</script><![endif]-->
+		
+  </body>
+</html>
